@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>SkillComposer: Generative Skill Composition for LLM Agents</title>
+
+  <!-- Primary Meta Tags -->
+  <meta name="title" content="SkillComposer: Generative Skill Composition for LLM Agents">
+  <meta name="description"
+    content="SkillComposer casts inference-time skill use for LLM agents as task-conditioned skill sequence prediction: a small constrained autoregressive decoder that jointly resolves which skills to load, how many, and in what order.">
+  <meta name="keywords"
+    content="LLM agents, agent skills, skill composition, skill retrieval, structured prediction, autoregressive decoding, tool use, SkillsBench, coding agents, machine learning">
+  <meta name="author"
+    content="Xinyu Zhao, Zhen Tan, Vaishnav Tadiparthi, Nakul Agarwal, Kwonjoon Lee, Ehsan Moradi Pari, Hossein Nourkhiz Mahjoub, Tianlong Chen">
+  <meta name="robots" content="index, follow">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="UNC Chapel Hill">
+  <meta property="og:title" content="SkillComposer: Generative Skill Composition for LLM Agents">
+  <meta property="og:description"
+    content="A 3.9M-parameter generative composer that jointly predicts which skills, how many, and in what order to load — matching the gold-skill upper bound at lower prompt-token cost.">
+  <meta property="og:url" content="https://skill-composer.github.io/">
+  <meta property="og:image" content="https://skill-composer.github.io/static/images/teaser.png">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SkillComposer: Generative Skill Composition for LLM Agents">
+  <meta name="twitter:description"
+    content="Structured skill composition for LLM agents: which skills, how many, and in what order — resolved jointly in a single decoding pass.">
+  <meta name="twitter:image" content="https://skill-composer.github.io/static/images/teaser.png">
+
+  <!-- Academic/Research Specific -->
+  <meta name="citation_title" content="Generative Skill Composition for LLM Agents">
+  <meta name="citation_author" content="Zhao, Xinyu">
+  <meta name="citation_author" content="Tan, Zhen">
+  <meta name="citation_author" content="Tadiparthi, Vaishnav">
+  <meta name="citation_author" content="Agarwal, Nakul">
+  <meta name="citation_author" content="Lee, Kwonjoon">
+  <meta name="citation_author" content="Moradi Pari, Ehsan">
+  <meta name="citation_author" content="Nourkhiz Mahjoub, Hossein">
+  <meta name="citation_author" content="Chen, Tianlong">
+  <meta name="citation_publication_date" content="2026">
+  <meta name="citation_pdf_url" content="https://skill-composer.github.io/static/pdfs/paper.pdf">
+
+  <meta name="theme-color" content="#1f6feb">
+
+  <!-- Favicon (inline puzzle-piece emoji; replace with a custom logo later) -->
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧩</text></svg>">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --card: #ffffff;
+      --text: #101827;
+      --muted: #4b5563;
+      --accent: #1f6feb;
+      --accent-soft: #e8f0fe;
+      --danger: #d1432f;
+      --success: #0f9d58;
+      --border: #e5e7eb;
+      --tldr-bg: #eef2fb;
+      --radius: 14px;
+      --shadow: 0 12px 30px rgba(15, 24, 46, 0.08);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 17px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.92em;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    main {
+      padding: 30px 0 60px;
+    }
+
+    /* Title block */
+    .title-block {
+      text-align: center;
+      margin: 48px 0 30px;
+    }
+
+    .title-emblem {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 6px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--accent), #4f8dff);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      box-shadow: 0 10px 24px rgba(31, 111, 235, 0.32);
+    }
+
+    .title-block h1 {
+      font-size: clamp(1.95rem, 3.2vw, 2.6rem);
+      letter-spacing: -0.03em;
+      margin: 12px 0 16px;
+      font-weight: 800;
+      line-height: 1.22;
+    }
+
+    .title-block h1 .name {
+      color: var(--accent);
+    }
+
+    .conference {
+      font-size: 1.4rem;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+
+    .authors {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px 12px;
+      font-size: 1.25rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .author:not(:last-child)::after {
+      content: ",";
+    }
+
+    .affil {
+      font-size: 0.7em;
+      margin-left: 1px;
+      vertical-align: super;
+      line-height: 1;
+      font-weight: 700;
+    }
+
+    .affil-1 {
+      color: #d1432f;
+    }
+
+    .affil-2 {
+      color: #f59e0b;
+    }
+
+    .affil-3 {
+      color: #0f9d58;
+    }
+
+    .author-link {
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .author-link:hover {
+      color: var(--accent);
+    }
+
+    .affiliations {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 1.1rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      column-gap: 16px;
+      row-gap: 6px;
+    }
+
+    .affiliation-item {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .corresp {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* Buttons */
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+      justify-content: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.98rem;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 10px 24px rgba(15, 24, 46, 0.08);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 28px rgba(15, 24, 46, 0.14);
+    }
+
+    .btn i {
+      font-size: 17px;
+    }
+
+    .btn.pdf i {
+      color: #c62828;
+    }
+
+    .btn.code i {
+      color: #24292e;
+    }
+
+    .btn.disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn.disabled:hover {
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* TL;DR */
+    .tldr {
+      position: relative;
+      text-align: center;
+      margin: 26px 0 8px;
+      padding: 30px 0 34px;
+      z-index: 0;
+    }
+
+    .tldr::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: calc(-50vw + 50%);
+      right: calc(-50vw + 50%);
+      background: var(--tldr-bg);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      z-index: -1;
+    }
+
+    .tldr .label {
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 800;
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .tldr .lead {
+      font-size: 1.08em;
+      margin: 10px auto 18px;
+      color: var(--text);
+      max-width: 860px;
+    }
+
+    .tldr-figure {
+      margin-top: 6px;
+    }
+
+    figure {
+      margin: 0;
+    }
+
+    figure img {
+      width: 100%;
+      display: block;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      background: #fff;
+    }
+
+    figcaption {
+      font-size: 0.95em;
+      margin-top: 12px;
+      line-height: 1.55;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    figcaption b,
+    figcaption strong {
+      color: var(--text);
+    }
+
+    /* Sections */
+    section {
+      margin: 44px 0;
+    }
+
+    .section-heading {
+      font-size: clamp(1.6rem, 2.4vw, 2rem);
+      margin: 8px 0 16px;
+      letter-spacing: -0.03em;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .lead-center {
+      text-align: center;
+      color: var(--muted);
+      max-width: 860px;
+      margin: 0 auto 24px;
+    }
+
+    .abstract-card {
+      padding: 24px 26px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: #f9fafb;
+      box-shadow: 0 10px 24px rgba(15, 24, 46, 0.04);
+      max-width: 920px;
+      margin: 0 auto;
+    }
+
+    .abstract-card p {
+      margin: 0;
+      color: #111827;
+      text-align: justify;
+    }
+
+    /* Pillars */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 8px;
+    }
+
+    .pillar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .pillar .pico {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      margin-bottom: 12px;
+    }
+
+    .pillar h3 {
+      margin: 0 0 8px;
+      font-size: 1.12rem;
+      letter-spacing: -0.02em;
+    }
+
+    .pillar p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.97rem;
+    }
+
+    /* Highlight stat cards */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .stat .num {
+      font-size: 2.1rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+    }
+
+    .stat .num.danger {
+      color: var(--danger);
+    }
+
+    .stat .num.success {
+      color: var(--success);
+    }
+
+    .stat .desc {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    /* Findings list */
+    .findings {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .finding {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .finding:last-child {
+      border-bottom: 0;
+    }
+
+    .finding .fico {
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-size: 15px;
+    }
+
+    .finding p {
+      margin: 0;
+    }
+
+    .finding b {
+      color: var(--text);
+    }
+
+    /* Table */
+    .table-wrap {
+      max-width: 760px;
+      margin: 22px auto 0;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.98rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    caption {
+      caption-side: bottom;
+      color: var(--muted);
+      font-size: 0.9rem;
+      padding-top: 10px;
+      text-align: left;
+    }
+
+    th,
+    td {
+      padding: 12px 16px;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    thead th {
+      background: #f3f4f6;
+      font-weight: 700;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .row-ours {
+      background: var(--accent-soft);
+      font-weight: 700;
+    }
+
+    .row-ceiling td {
+      font-style: italic;
+      color: var(--muted);
+      background: #f9fafb;
+    }
+
+    /* Figure grid for analysis */
+    .fig-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 22px;
+      align-items: start;
+    }
+
+    /* Code / BibTeX */
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 56px 16px 16px;
+      border-radius: 10px;
+      overflow-x: auto;
+      border: 1px solid #1f2a44;
+      position: relative;
+      font-family: var(--mono);
+      font-size: 0.92rem;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      background: #111827;
+      color: #e5e7eb;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    /* Back to top */
+    .to-top {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #111827;
+      color: #f9fafb;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 14px 30px rgba(15, 24, 46, 0.16);
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 30;
+    }
+
+    .to-top.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .to-top:hover {
+      transform: translateY(-2px);
+    }
+
+    footer {
+      margin: 50px 0 20px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        font-size: 16px;
+      }
+
+      .authors {
+        gap: 4px 10px;
+        font-size: 1.1rem;
+      }
+
+      .abstract-card p {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container" id="top">
+
+    <!-- Title block -->
+    <section class="title-block">
+      <div class="title-emblem"><i class="fa-solid fa-diagram-project"></i></div>
+      <h1>Generative Skill Composition for LLM Agents</h1>
+      <div class="conference">Preprint 2026</div>
+      <div class="authors">
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Xinyu Zhao</a><sup
+            class="affil affil-1">1</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Zhen Tan</a><sup
+            class="affil affil-2">2</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Vaishnav
+            Tadiparthi</a><sup class="affil affil-3">3</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Nakul Agarwal</a><sup
+            class="affil affil-3">3</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Kwonjoon Lee</a><sup
+            class="affil affil-3">3</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Ehsan Moradi Pari</a><sup
+            class="affil affil-3">3</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Hossein Nourkhiz
+            Mahjoub</a><sup class="affil affil-3">3</sup></span>
+        <span class="author"><a class="author-link" href="#" target="_blank" rel="noopener">Tianlong Chen</a><sup
+            class="affil affil-1">1</sup><sup>&#9993;</sup></span>
+      </div>
+      <div class="affiliations">
+        <span class="affiliation-item"><sup class="affil affil-1">1</sup><span>The University of North Carolina at
+            Chapel Hill</span></span>
+        <span class="affiliation-item"><sup class="affil affil-2">2</sup><span>Arizona State University</span></span>
+        <span class="affiliation-item"><sup class="affil affil-3">3</sup><span>Honda Research Institute USA</span></span>
+      </div>
+      <div class="corresp"><sup>&#9993;</sup> Corresponding author</div>
+
+      <div class="hero-actions">
+        <a class="btn pdf" href="static/pdfs/paper.pdf" target="_blank" rel="noopener"><i
+            class="fa-solid fa-file-pdf"></i><span>Paper</span></a>
+        <!-- TODO: replace href with the code repository URL once released -->
+        <a class="btn code" href="https://skill-composer.github.io/" target="_blank" rel="noopener"><i
+            class="fa-brands fa-github"></i><span>Code (coming soon)</span></a>
+      </div>
+    </section>
+
+    <!-- TL;DR + teaser -->
+    <section class="tldr" id="tldr">
+      <div class="label">TL;DR</div>
+      <p class="lead">As skill libraries grow, the bottleneck shifts from <i>obtaining</i> skills to <i>composing</i>
+        them&mdash;deciding which skills to load, how many, and in what order. <b>SkillComposer</b> casts this as
+        task-conditioned skill sequence prediction: a small constrained autoregressive decoder resolves all three
+        jointly in a single pass, matching the gold-skill upper bound at lower prompt-token cost.</p>
+      <figure class="tldr-figure">
+        <img src="static/images/teaser.png" alt="Structured skill composition with SkillComposer">
+        <figcaption>
+          <b>Structured skill composition with SkillComposer.</b> <b>(A)</b> Large skill libraries create a composition
+          bottleneck&mdash;an agent must decide not only <i>which</i> skills to use, but also their exact <i>count</i>
+          and execution <i>order</i>. <b>(B)</b> Existing paradigms leave composition implicit: direct reasoning
+          produces an unstructured trace, and retrieval returns an unordered subset. SkillComposer instead predicts an
+          ordered, executable skill plan. <b>(C)</b> Structuring composition improves both plan Set F1 and downstream
+          task success on SkillsBench.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- Abstract -->
+    <section id="abstract">
+      <h2 class="section-heading">Abstract</h2>
+      <div class="abstract-card">
+        <p>
+          Recent LLM agents benefit from skills for solving complex tasks. Skills encapsulate modular packages of
+          procedural knowledge and instructions for performing specialized tasks, such as setting up a sandboxed
+          environment, running a test suite, or refactoring a function across multiple files. As skill libraries grow
+          and become reusable across tasks and domains, selecting an appropriate skill composition has emerged as a
+          central bottleneck. Existing approaches fall into two categories: one exposes the agent's reasoning to the
+          entire skill collection; the other performs skill retrieval via embeddings or LLM-based rerankers. Both
+          provide useful insights; however, they miss the structural nature of skill composition, which is a joint
+          decision over <b>which skills, how many, and in what order</b>&mdash;three dimensions that cannot be decoupled.
+          We formalize this as <b>structured skill composition</b>: given a task and a skill library, predict an
+          executable skill plan that jointly specifies the activated subset, count, and execution order. We propose
+          <b>SkillComposer</b>, which instantiates structured skill composition as task-conditioned skill sequence
+          prediction. SkillComposer uses a constrained autoregressive decoder over skill identifiers, so subset, count,
+          and order emerge jointly from a single decoding pass, and dependencies between successive skills are captured
+          naturally. We build a training set of task&ndash;composition pairs from a real, human-curated skill library,
+          and evaluate SkillComposer along two axes: composition quality on a held-out test set, and downstream task
+          success on SkillsBench across two production-grade coding agents. On {GPT-5.2-Codex, Gemini-3-Pro-Preview},
+          SkillComposer raises the pass rate by {<b>+23.1</b>, <b>+18.2</b>}&nbsp;pp over the no-skill baseline,
+          surpassing top-3 retrieval and matching the gold-skill retrieval upper bound at lower prompt-token cost.
+        </p>
+      </div>
+    </section>
+
+    <!-- Contributions / pillars -->
+    <section id="contributions">
+      <h2 class="section-heading">Contributions</h2>
+      <p class="lead-center">SkillComposer reframes inference-time skill use as a structured prediction problem over a
+        fixed, reusable skill library.</p>
+      <div class="pillars">
+        <div class="pillar">
+          <div class="pico"><i class="fa-solid fa-diagram-project"></i></div>
+          <h3>Structured Composition</h3>
+          <p>We formalize inference-time skill use as a structured prediction problem: the output plan jointly
+            determines which skills to activate, how many are needed, and in what order they execute&mdash;three coupled
+            dimensions that retrieval and direct reasoning leave implicit.</p>
+        </div>
+        <div class="pillar">
+          <div class="pico"><i class="fa-solid fa-database"></i></div>
+          <h3>Library-Grounded Data</h3>
+          <p>9,872 task&ndash;composition records over a real, human-curated 196-skill library. Starting from real
+            task-composition seeds, we build a skill dependency graph and use layered synthesis with quality filtering
+            for both single-skill grounding and dependency-aware multi-skill chains.</p>
+        </div>
+        <div class="pillar">
+          <div class="pico"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+          <h3>Generative Composer</h3>
+          <p>A task-conditioned constrained autoregressive decoder over skill identifiers. Auxiliary cardinality and
+            set-membership heads, plus a retrieval-augmented decoding prior, unify subset, count, and ordering while
+            guaranteeing every output is an executable library skill.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Framework / method -->
+    <section id="framework">
+      <h2 class="section-heading">Method</h2>
+      <p class="lead-center">SkillComposer encodes the task&ndash;library context with a frozen retrieval-tuned encoder,
+        then decodes a variable-length, ordered sequence of skill indices&mdash;fusing retrieval and set-membership
+        priors into the decoder logits at inference time.</p>
+      <figure>
+        <img src="static/images/method.png" alt="SkillComposer method overview">
+        <figcaption>
+          <b>The SkillComposer pipeline.</b> <b>(A)</b> Given a task, environment context, and compact metadata from a
+          fixed skill library, a frozen text encoder maps the prompt to a dense task representation. <b>(B)</b> A small
+          autoregressive decoder produces prefix-conditioned skill logits, while auxiliary <i>cardinality</i> (how many)
+          and <i>set</i> (which) heads supply dedicated supervision. <b>(C)</b> During retrieval-augmented decoding,
+          contextual logits are fused with a TF&ndash;IDF relevance prior and the set-membership prior; the predicted
+          count guides termination. The resulting skill-index sequence is resolved into full skill packages and loaded
+          into the agent context in the predicted order.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- Key results -->
+    <section id="results">
+      <h2 class="section-heading">Key Results</h2>
+      <p class="lead-center">Across two production-grade coding agents, better composition predictions translate into
+        better agent execution&mdash;at a smaller prompt budget than retrieval or flooding the context.</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="num">+23.1</div>
+          <div class="desc">pp pass-rate gain on GPT-5.2-Codex over the no-skill baseline</div>
+        </div>
+        <div class="stat">
+          <div class="num">+18.2</div>
+          <div class="desc">pp pass-rate gain on Gemini-3-Pro-Preview over the no-skill baseline</div>
+        </div>
+        <div class="stat">
+          <div class="num success">3.9M</div>
+          <div class="desc">trainable parameters &mdash; ~154&times; fewer than the 600M SFT baseline</div>
+        </div>
+        <div class="stat">
+          <div class="num success">+19.3</div>
+          <div class="desc">pp Set F1 over SFT on held-out real tasks under distribution shift</div>
+        </div>
+      </div>
+
+      <div class="findings" style="margin-top:30px;">
+        <div class="finding">
+          <div class="fico"><i class="fa-solid fa-diagram-project"></i></div>
+          <p><b>Composition is structural, not just selection.</b> A ranked list does not say how many skills to use or
+            in what order. SkillComposer resolves subset, count, and order jointly in one decoding pass, capturing
+            dependencies between successive skills.</p>
+        </div>
+        <div class="finding">
+          <div class="fico"><i class="fa-solid fa-feather"></i></div>
+          <p><b>A small specialist beats a big generalist under shift.</b> With only 3.9M trainable parameters,
+            SkillComposer matches a 600M SFT model in-distribution and beats it by <b>+19.3&nbsp;pp Set F1</b> on
+            held-out real software-engineering tasks&mdash;SFT memorizes the synthetic template and collapses.</p>
+        </div>
+        <div class="finding">
+          <div class="fico"><i class="fa-solid fa-arrow-trend-up"></i></div>
+          <p><b>Better plans translate to better agents.</b> Upstream composition gains carry through to execution:
+            <b>+23.1 / +18.2&nbsp;pp</b> pass rate on {Codex, Gemini}, closing roughly <b>80%</b> of the headroom to the
+            gold-skill upper bound.</p>
+        </div>
+        <div class="finding">
+          <div class="fico"><i class="fa-solid fa-gauge-high"></i></div>
+          <p><b>Accuracy at a lower token budget.</b> SkillComposer matches or exceeds oracle retrieval while using the
+            smallest prompt budget among skill-loaded conditions (1.03M Codex tokens). Flooding the context with all 196
+            skills recovers little and inflates the prompt to 1.27M tokens.</p>
+        </div>
+      </div>
+
+      <!-- Downstream table -->
+      <div class="table-wrap">
+        <table>
+          <caption>Downstream pass rate on SkillsBench (75 tasks, 3 attempts each) across two production-grade coding
+            agents. <b>Tok.</b> is the average input prompt tokens per non-errored trial. <i>Gold Skills</i> is the
+            oracle upper bound; best non-oracle pass rate in <b>bold</b>.</caption>
+          <thead>
+            <tr>
+              <th rowspan="2">Skill condition</th>
+              <th colspan="2">GPT-5.2-Codex</th>
+              <th colspan="2">Gemini-3-Pro</th>
+            </tr>
+            <tr>
+              <th>Pass&nbsp;(%)&nbsp;&uarr;</th>
+              <th>Tok.&nbsp;&darr;</th>
+              <th>Pass&nbsp;(%)&nbsp;&uarr;</th>
+              <th>Tok.&nbsp;&darr;</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row-ceiling">
+              <td>Gold Skills (oracle)</td>
+              <td>51.1</td>
+              <td>1.12M</td>
+              <td>48.4</td>
+              <td>1.18M</td>
+            </tr>
+            <tr>
+              <td>No Skills</td>
+              <td>22.2</td>
+              <td>0.94M</td>
+              <td>25.8</td>
+              <td>0.99M</td>
+            </tr>
+            <tr>
+              <td>All Skills</td>
+              <td>29.3</td>
+              <td>1.27M</td>
+              <td>38.7</td>
+              <td>1.33M</td>
+            </tr>
+            <tr>
+              <td>Retrieval (top-3)</td>
+              <td>44.0</td>
+              <td>1.09M</td>
+              <td>41.8</td>
+              <td>1.14M</td>
+            </tr>
+            <tr class="row-ours">
+              <td>SkillComposer (ours)</td>
+              <td><b>45.3</b></td>
+              <td>1.03M</td>
+              <td><b>44.0</b></td>
+              <td>1.08M</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Analysis -->
+    <section id="analysis">
+      <h2 class="section-heading">Analysis</h2>
+      <p class="lead-center">SkillComposer is Pareto-optimal among predicted-<i>k</i> methods and is most robust exactly
+        where over-emitting skills is most costly.</p>
+      <div class="fig-grid">
+        <figure>
+          <img src="static/images/pareto_compute.png" alt="Compute-accuracy frontier">
+          <figcaption>
+            <b>Compute&ndash;accuracy frontier.</b> On the in-distribution test split, SkillComposer is Pareto-optimal:
+            it matches or beats the 600M SFT model with ~154&times; fewer trainable parameters and ~25&times; less
+            training compute, and clearly dominates retrieval and the LLM-judge.
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="static/images/cardinality.png" alt="Set F1 stratified by gold cardinality">
+          <figcaption>
+            <b>Cardinality robustness.</b> Set F1 stratified by gold cardinality <i>k</i>. SkillComposer's advantage
+            concentrates at <i>k</i>&nbsp;=&nbsp;1, where over-emitting skills is most punished, yielding the best
+            macro-averaged Set F1.
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- BibTeX -->
+    <section id="bibtex">
+      <h2 class="section-heading">BibTeX</h2>
+      <pre><code>@misc{zhao2026skillcomposer,
+  title  = {Generative Skill Composition for LLM Agents},
+  author = {Zhao, Xinyu and Tan, Zhen and Tadiparthi, Vaishnav and Agarwal, Nakul
+            and Lee, Kwonjoon and Moradi Pari, Ehsan and Nourkhiz Mahjoub, Hossein
+            and Chen, Tianlong},
+  year   = {2026},
+  note   = {Preprint},
+  url    = {https://skill-composer.github.io/}
+}
+</code></pre>
+    </section>
+
+    <footer>
+      <p>Page design adapted from the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template"
+          target="_blank" rel="noopener">Academic Project Page Template</a>. This website is licensed under a <a
+          href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="license noopener">CC BY-SA 4.0</a>
+        License.</p>
+    </footer>
+  </main>
+
+  <button id="to-top" class="to-top" type="button" aria-label="Back to top">
+    <i class="fa-solid fa-arrow-up"></i>
+  </button>
+
+  <script>
+    function attachCopyButtons() {
+      document.querySelectorAll("pre").forEach((pre) => {
+        if (pre.querySelector(".copy-btn")) return;
+        const button = document.createElement("button");
+        button.className = "copy-btn";
+        button.type = "button";
+        button.textContent = "Copy";
+        button.addEventListener("click", () => {
+          const codeEl = pre.querySelector("code");
+          const textToCopy = (codeEl ? codeEl.textContent : pre.textContent).trim();
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            button.textContent = "Copied";
+            setTimeout(() => (button.textContent = "Copy"), 1200);
+          });
+        });
+        pre.appendChild(button);
+      });
+    }
+    function initBackToTop() {
+      const btn = document.getElementById("to-top");
+      if (!btn) return;
+      const toggle = () => btn.classList.toggle("show", window.scrollY > 280);
+      toggle();
+      window.addEventListener("scroll", toggle, { passive: true });
+      btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      attachCopyButtons();
+      initBackToTop();
+    });
+  </script>
+</body>
+
+</html>
